@@ -143,11 +143,14 @@ def smazat_ukol_podle_id(ukol_id):
 		cnx = get_connection()
 		cursor = cnx.cursor()
 		cursor.execute("DELETE FROM ukoly WHERE id = %s", (ukol_id,))
+		affected = cursor.rowcount
 		cnx.commit()
 		cursor.close()
 		cnx.close()
+		return affected > 0
 	except mysql.connector.Error as err:
 		print("Chyba při mazání úkolu:", err)
+		return False
 
 
 def odstranit_ukol():
@@ -174,11 +177,14 @@ def aktualizovat_stav_ukolu(ukol_id, novy_stav):
 		cnx = get_connection()
 		cursor = cnx.cursor()
 		cursor.execute("UPDATE ukoly SET stav = %s WHERE id = %s", (novy_stav, ukol_id))
+		affected = cursor.rowcount
 		cnx.commit()
 		cursor.close()
 		cnx.close()
+		return affected > 0
 	except mysql.connector.Error as err:
 		print("Chyba při aktualizaci stavu úkolu:", err)
+		return False
 
 def aktualizovat_ukol():
 	seznam = nacist_ukoly_z_db()
