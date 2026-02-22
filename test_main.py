@@ -83,22 +83,34 @@ class TestPridatUkol:
         # Přidáme úkol do testovací databáze pomocí skutečné funkce
         pridat_ukol_do_db("Testovací úkol", "Popis testovacího úkolu")
 
-        # Ověříme, že úkol byl přidán
-        ukoly = nacist_ukoly_z_db()
-        assert len(ukoly) == 1
-        assert ukoly[0].nazev == "Testovací úkol"
-        assert ukoly[0].popis == "Popis testovacího úkolu"
-        assert ukoly[0].stav == "nezahájeno"
+        # Ověříme přímým SQL dotazem do databáze
+        cnx = get_test_connection()
+        cursor = cnx.cursor()
+        cursor.execute("SELECT * FROM ukoly WHERE nazev = %s", ("Testovací úkol",))
+        ukol = cursor.fetchone()
+        cursor.close()
+        cnx.close()
+        
+        assert ukol is not None
+        assert ukol[1] == "Testovací úkol"  # nazev
+        assert ukol[2] == "Popis testovacího úkolu"  # popis
+        assert ukol[3] == "nezahájeno"  # stav
 
     def test_pridat_ukol_negativni_prazdny_nazev(self):
         """NEGATIVNÍ TEST: Přidání úkolu s prázdným názvem"""
         # Pokus přidat úkol s prázdným názvem - MySQL přijme, ale aplikace by měla validovat
         pridat_ukol_do_db("", "Popis úkolu")
         
-        # MySQL vloží prázdný řetězec jako validní hodnotu
-        ukoly = nacist_ukoly_z_db()
-        assert len(ukoly) == 1
-        assert ukoly[0].nazev == ""
+        # Ověříme přímým SQL dotazem, že se prázdný úkol přidal
+        cnx = get_test_connection()
+        cursor = cnx.cursor()
+        cursor.execute("SELECT * FROM ukoly WHERE nazev = %s", ("",))
+        ukol = cursor.fetchone()
+        cursor.close()
+        cnx.close()
+        
+        assert ukol is not None
+        assert ukol[1] == ""  # nazev je prázdný
 
     def test_pridat_ukol_negativni_specialni_znaky(self):
         """NEGATIVNÍ TEST: Přidání úkolu se speciálními znaky"""
@@ -108,10 +120,16 @@ class TestPridatUkol:
             "Popis s nebezpečnými znaky"
         )
 
-        # Ověříme, že tabulka stále existuje a úkol byl správně přidán
-        ukoly = nacist_ukoly_z_db()
-        assert len(ukoly) == 1
-        assert ukoly[0].nazev == "Úkol'; DROP TABLE ukoly; --"
+        # Ověříme přímým SQL dotazem, že tabulka stále existuje a úkol byl správně přidán
+        cnx = get_test_connection()
+        cursor = cnx.cursor()
+        cursor.execute("SELECT * FROM ukoly WHERE nazev = %s", ("Úkol'; DROP TABLE ukoly; --",))
+        ukol = cursor.fetchone()
+        cursor.close()
+        cnx.close()
+        
+        assert ukol is not None
+        assert ukol[1] == "Úkol'; DROP TABLE ukoly; --"  # nazev
 
 
 # ==================== TESTY PRO aktualizovat_stav_ukolu() ====================
@@ -124,37 +142,68 @@ class TestAktualizovatStav:
         """POZITIVNÍ TEST: Aktualizace stavu na 'probíhá'"""
         # Přidáme úkol
         pridat_ukol_do_db("Úkol ke změně", "Popis úkolu")
-        ukoly = nacist_ukoly_z_db()
-        ukol_id = ukoly[0].id
+        
+        # Získáme ID úkolu přímým SQL dotazem
+        cnx = get_test_connection()
+        cursor = cnx.cursor()
+        cursor.execute("SELECT id FROM ukoly WHERE nazev = %s", ("Úkol ke změně",))
+        ukol_id = cursor.fetchone()[0]
+        cursor.close()
+        cnx.close()
 
         # Změníme stav
         aktualizovat_stav_ukolu(ukol_id, "probíhá")
 
-        # Ověříme změnu
-        aktualizovane_ukoly = nacist_ukoly_z_db()
-        assert len(aktualizovane_ukoly) == 1
-        assert aktualizovane_ukoly[0].stav == "probíhá"
+        # Ověříme změnu přímým SQL dotazem
+        cnx = get_test_connection()
+        cursor = cnx.cursor()
+        cursor.execute("SELECT stav FROM ukoly WHERE id = %s", (ukol_id,))
+        stav = cursor.fetchone()[0]
+        cursor.close()
+        cnx.close()
+        
+        assert stav == "probíhá"
 
     def test_aktualizovat_stav_negativni_neexistujici_id(self):
         """NEGATIVNÍ TEST: Aktualizace stavu pro neexistující ID - očekáváme False"""
         result = aktualizovat_stav_ukolu(9999, "hotovo")
         assert result is False, "Funkce má vrátit False pro neexistující ID"
-        ukoly = nacist_ukoly_z_db()
-        assert len(ukoly) == 0
+        
+        # Ověříme přímým SQL dotazem, že v databázi nejsou žádné úkoly
+        cnx = get_test_connection()
+        cursor = cnx.cursor()
+        cursor.execute("SELECT COUNT(*) FROM ukoly")
+        count = cursor.fetchone()[0]
+        cursor.close()
+        cnx.close()
+        
+        assert count == 0
 
     def test_aktualizovat_stav_pozitivni_na_hotovo(self):
         """POZITIVNÍ TEST: Aktualizace stavu na 'hotovo'"""
         # Přidáme úkol
         pridat_ukol_do_db("Hotový úkol", "Popis")
-        ukoly = nacist_ukoly_z_db()
-        ukol_id = ukoly[0].id
+        
+        # Získáme ID úkolu přímým SQL dotazem
+        cnx = get_test_connection()
+        cursor = cnx.cursor()
+        cursor.execute("SELECT id FROM ukoly WHERE nazev = %s", ("Hotový úkol",))
+        ukol_id = cursor.fetchone()[0]
+        cursor.close()
+        cnx.close()
 
         # Změníme na hotovo
         aktualizovat_stav_ukolu(ukol_id, "hotovo")
 
-        # Ověříme
-        updated = nacist_ukoly_z_db()
-        assert updated[0].stav == "hotovo"
+        # Ověříme přímým SQL dotazem
+        cnx = get_test_connection()
+        cursor = cnx.cursor()
+        cursor.execute("SELECT stav FROM ukoly WHERE id = %s", (ukol_id,))
+        stav = cursor.fetchone()[0]
+        cursor.close()
+        cnx.close()
+        
+        assert stav == "hotovo"
 
 
 # ==================== TESTY PRO smazat_ukol_podle_id() ====================
@@ -167,23 +216,42 @@ class TestSmazatUkol:
         """POZITIVNÍ TEST: Smazání existujícího úkolu"""
         # Přidáme úkol
         pridat_ukol_do_db("Úkol k smazání", "Popis")
-        ukoly = nacist_ukoly_z_db()
-        assert len(ukoly) == 1
-        ukol_id = ukoly[0].id
+        
+        # Získáme ID úkolu
+        cnx = get_test_connection()
+        cursor = cnx.cursor()
+        cursor.execute("SELECT id FROM ukoly WHERE nazev = %s", ("Úkol k smazání",))
+        ukol_id = cursor.fetchone()[0]
+        cursor.close()
+        cnx.close()
 
         # Smažeme úkol
         smazat_ukol_podle_id(ukol_id)
 
-        # Ověříme, že úkol byl smazán
-        updated_ukoly = nacist_ukoly_z_db()
-        assert len(updated_ukoly) == 0
+        # Ověříme přímým SQL dotazem, že úkol byl smazán
+        cnx = get_test_connection()
+        cursor = cnx.cursor()
+        cursor.execute("SELECT COUNT(*) FROM ukoly WHERE id = %s", (ukol_id,))
+        count = cursor.fetchone()[0]
+        cursor.close()
+        cnx.close()
+        
+        assert count == 0
 
     def test_smazat_ukol_negativni_neexistujici_id(self):
         """NEGATIVNÍ TEST: Smazání neexistujícího úkolu - očekáváme False"""
         result = smazat_ukol_podle_id(9999)
         assert result is False, "Funkce má vrátit False pro neexistující ID"
-        ukoly = nacist_ukoly_z_db()
-        assert len(ukoly) == 0
+        
+        # Ověříme přímým SQL dotazem, že v databázi nejsou žádné úkoly
+        cnx = get_test_connection()
+        cursor = cnx.cursor()
+        cursor.execute("SELECT COUNT(*) FROM ukoly")
+        count = cursor.fetchone()[0]
+        cursor.close()
+        cnx.close()
+        
+        assert count == 0
 
     def test_smazat_ukol_pozitivni_viceukolu(self):
         """POZITIVNÍ TEST: Smazání konkrétního úkolu z více úkolů"""
@@ -192,18 +260,38 @@ class TestSmazatUkol:
         pridat_ukol_do_db("Úkol 2", "Popis 2")
         pridat_ukol_do_db("Úkol 3", "Popis 3")
 
-        ukoly = nacist_ukoly_z_db()
-        assert len(ukoly) == 3
+        # Získáme ID druhého úkolu
+        cnx = get_test_connection()
+        cursor = cnx.cursor()
+        cursor.execute("SELECT id FROM ukoly WHERE nazev = %s", ("Úkol 2",))
+        ukol_2_id = cursor.fetchone()[0]
+        
+        # Ověříme, že máme 3 úkoly
+        cursor.execute("SELECT COUNT(*) FROM ukoly")
+        count_before = cursor.fetchone()[0]
+        assert count_before == 3
+        
+        cursor.close()
+        cnx.close()
         
         # Smažeme druhý úkol
-        ukol_id_k_smazani = ukoly[1].id
-        smazat_ukol_podle_id(ukol_id_k_smazani)
+        smazat_ukol_podle_id(ukol_2_id)
 
-        # Ověříme, že zbývají jen 2 úkoly
-        updated_ukoly = nacist_ukoly_z_db()
-        assert len(updated_ukoly) == 2
-        assert updated_ukoly[0].nazev == "Úkol 1"
-        assert updated_ukoly[1].nazev == "Úkol 3"
+        # Ověříme přímým SQL dotazem
+        cnx = get_test_connection()
+        cursor = cnx.cursor()
+        cursor.execute("SELECT COUNT(*) FROM ukoly")
+        count_after = cursor.fetchone()[0]
+        assert count_after == 2
+        
+        # Ověříme, že zbývají správné úkoly
+        cursor.execute("SELECT nazev FROM ukoly ORDER BY id")
+        remaining = cursor.fetchall()
+        cursor.close()
+        cnx.close()
+        
+        assert remaining[0][0] == "Úkol 1"
+        assert remaining[1][0] == "Úkol 3"
 
 
 # ==================== INTEGRAČNÍ TEST ====================
@@ -219,20 +307,52 @@ class TestIntegrace:
         pridat_ukol_do_db("Vyčistit", "Vyčistit byt")
         pridat_ukol_do_db("Studovat", "Studie Python")
 
-        ukoly = nacist_ukoly_z_db()
-        assert len(ukoly) == 3
+        # Ověříme, že jsou 3 úkoly
+        cnx = get_test_connection()
+        cursor = cnx.cursor()
+        cursor.execute("SELECT COUNT(*) FROM ukoly")
+        assert cursor.fetchone()[0] == 3
+        
+        # Získáme ID prvního úkolu
+        cursor.execute("SELECT id FROM ukoly WHERE nazev = %s", ("Nakoupit",))
+        ukol_1_id = cursor.fetchone()[0]
+        
+        # Získáme ID druhého úkolu
+        cursor.execute("SELECT id FROM ukoly WHERE nazev = %s", ("Vyčistit",))
+        ukol_2_id = cursor.fetchone()[0]
+        
+        cursor.close()
+        cnx.close()
 
         # 2. Změníme stav prvního úkolu
-        aktualizovat_stav_ukolu(ukoly[0].id, "probíhá")
-        updated = nacist_ukoly_z_db()
-        assert updated[0].stav == "probíhá"
+        aktualizovat_stav_ukolu(ukol_1_id, "probíhá")
+        
+        # Ověříme stav prvního úkolu
+        cnx = get_test_connection()
+        cursor = cnx.cursor()
+        cursor.execute("SELECT stav FROM ukoly WHERE id = %s", (ukol_1_id,))
+        assert cursor.fetchone()[0] == "probíhá"
+        cursor.close()
+        cnx.close()
 
         # 3. Smažeme druhý úkol
-        smazat_ukol_podle_id(ukoly[1].id)
-        final_ukoly = nacist_ukoly_z_db()
-        assert len(final_ukoly) == 2
+        smazat_ukol_podle_id(ukol_2_id)
+        
+        # Ověříme, že zbývají jen 2 úkoly
+        cnx = get_test_connection()
+        cursor = cnx.cursor()
+        cursor.execute("SELECT COUNT(*) FROM ukoly")
+        assert cursor.fetchone()[0] == 2
+        cursor.close()
+        cnx.close()
 
-        # 4. Změníme stav zbývajícího úkolu na hotovo
-        aktualizovat_stav_ukolu(final_ukoly[0].id, "hotovo")
-        final_updated = nacist_ukoly_z_db()
-        assert final_updated[0].stav == "hotovo"
+        # 4. Změníme stav prvního úkolu na hotovo
+        aktualizovat_stav_ukolu(ukol_1_id, "hotovo")
+        
+        # Ověříme konečný stav
+        cnx = get_test_connection()
+        cursor = cnx.cursor()
+        cursor.execute("SELECT stav FROM ukoly WHERE id = %s", (ukol_1_id,))
+        assert cursor.fetchone()[0] == "hotovo"
+        cursor.close()
+        cnx.close()
